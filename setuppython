@@ -1,0 +1,5 @@
+# Copyright 2020 Duality Technologies Inc.
+#
+# Authors: David Cousins
+echo "this should be run in root directory using source ./setuppython"
+export PYTHONPATH=/home/stefan/Desktop/palisade-python-demo/build/lib:$PYTHONPATH

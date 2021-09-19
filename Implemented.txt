@@ -1,0 +1,23 @@
+---------------+-----------------------+
+---------------| Encrypted | Plaintext |
+---------------+-----+-----+-----+-----+
+---------------| KNN | SVM | KNN | SVM |
+---------------+-----+-----+-----+-----+
+Palisade [Fit] |  N  |  N  |  Y  |  Y  |
+Pyfhel	 [Fit] |  N  |  N  |  Y  |  Y  |
+SEAL	 [Fit] |  N  |  N  |  Y  |  Y  |
+---------------+-----+-----+-----+-----+
+Palisade [Pre] |  Y  |  Y  |  Y  |  Y  |
+Pyfhel	 [Pre] |  Y  |  Y  |  Y  |  Y  |
+SEAL	 [Pre] |  Y  |  Y  |  Y  |  Y  |
+---------------+-----+-----+-----+-----+
+
+Palisade KNN - In Progress [Saturday]
+
+SEAL SVM - In progress [Sunday]
+SEAL KNN - In progress [Sunday]
+
+
+Pyfhel KNN - Done -- Problem sa racunanjem, prevelik sum, mora bootstrap koji nije podrzan
+Palisade SVM - Done
+Pyfhel SVM - Done

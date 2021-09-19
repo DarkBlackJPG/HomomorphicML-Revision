@@ -25,13 +25,16 @@ class KNN(ML):
     def encrypted_distance(self, X1, X2):
         pass
 
-    def symmetric_encrypt(self, X) -> object:
+    def symmetric_encrypt(self, X, password) -> object:
         pass
 
-    def symmetric_decrypt(self, X) -> object:
+    def symmetric_decrypt(self, X, password, iv) -> object:
         pass
 
     def pickle_data(self, X) -> object:
+        pass
+
+    def unpickle_data(self, X) -> object:
         pass
     
     def change_distance_calc_type(self, distance_type):
@@ -75,6 +78,8 @@ class KNN(ML):
 
         self.X = X
         self.y = y
+
+        self.n_samples, self.n_features = len(X), len(X[0])
 
         if data_normalization:
             normalization_type_for_X = data_normalization['X']
