@@ -1,8 +1,8 @@
 from timeit import timeit
-from numpy import add, byte
+from numpy import add, byte, copyto
 from DataSender import DataSender
 from KNN import *
-from Pyfhel import *
+import pycrypto
 import pickle
 from AES import AES
 import pickle
@@ -26,19 +26,21 @@ class PyfhelKNN(KNN):
         self.disclosed_iv = b'\xc8\x8b\xf7\rn\xaf.\xd67\xb0\xd8\xd7\xd8\x17\x1cf'
     
     def encrypt_data(self, X) -> object:
-        if not isinstance(X, list) and not isinstance(X, np.ndarray):
+        if isinstance(X, np.ndarray):
+            raise ValueError
+
+        if not isinstance(X, list):
             return self.crypto_context.encryptFrac(X)
 
         encrypted_data = []
         for row in X:
-            if isinstance(row, list) and len(row) > 1: 
-                temp_array = []
-                for cell in row:
-                    temp_array.append(self.crypto_context.encryptFrac(cell))
-                encrypted_data.append(temp_array)
+            if isinstance(row, list): # and len(row) > 1: 
+                encrypted_data.append(self.crypto_context.Encrypt(row))
             else:
-                encrypted_data.append(self.crypto_context.encryptFrac(row))
+                print('Invalid data for encryption, must be list')
+                raise ValueError
         return encrypted_data
+    
     
     def encrypted_fit(self) -> None:
         print('Homomorphic fitting not supported - Will plaintext fit then encrypt weights')
@@ -164,52 +166,16 @@ class PyfhelKNN(KNN):
         self.general_timer.start()
         result = None
         if isinstance(X, list):
-            result = [self.crypto_context.decryptFrac(element) for element in X]
+            print('Expected ciphertext object, got list')
+            raise ValueError
         else:
-            result = self.crypto_context.decryptFrac(X)
+            result = self.crypto_context.Decrypt(X)
         
         self.general_timer.finish()
         self.time_tracking[self.DECDATA] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS) 
         return result
 
-    def initialize(self, X, y, cryptographic_params: dict = None, data_normalization: dict = None) -> None:
-        super().initialize(X, y, None, data_normalization)
 
-        self.cryptographic_params = cryptographic_params
-        if cryptographic_params is None:
-            self.cryptographic_params = {}
-            self.cryptographic_params['p'] = 63
-            self.cryptographic_params['m'] = 2048
-            self.cryptographic_params['base'] = 2
-            self.cryptographic_params['intDigits'] = 64
-            self.cryptographic_params['fracDigits'] = 64
-            self.cryptographic_params['relinKeySize'] = 6
-            self.cryptographic_params['bitCount'] = 16
-        
-        self.general_timer.start()
-        self.crypto_context = Pyfhel()
-        self.crypto_context.contextGen(
-            p=self.cryptographic_params['p'],
-            m=self.cryptographic_params['m'],
-            base=self.cryptographic_params['base'],
-            intDigits=self.cryptographic_params['intDigits'],
-            fracDigits=self.cryptographic_params['fracDigits'])
-        self.crypto_context.keyGen()
-        self.crypto_context.relinKeyGen(self.cryptographic_params['bitCount'], self.cryptographic_params['relinKeySize'])
-
-        self.general_timer.finish()
-        self.time_tracking[self.KEYGEN] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-
-        self.general_timer.start()
-        self.encrypted_X = self.encrypt_data(np_to_list(self.X))
-        self.general_timer.finish()
-        self.time_tracking[self.DATAENCX] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-
-        self.general_timer.start()
-        self.encrypted_y = self.encrypt_data(np_to_list(self.y))
-        self.general_timer.finish()
-        self.time_tracking[self.DATAENCY] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-  
     def encrypted_distance(self, X1, X2):
         X_1 = [PyCtxt(x) for x in X1] # Copy
         X_2 = [PyCtxt(x) for x in X2] # Copy
@@ -249,6 +215,35 @@ class PyfhelKNN(KNN):
         
     def unpickle_data(self, X) -> object:
         return pickle.loads(X)
+
+    def initialize(self, X, y, cryptographic_params: dict = None, data_normalization: dict = None) -> None:
+        super().initialize(X, y, None, data_normalization)
+
+        self.cryptographic_params = cryptographic_params
+        if cryptographic_params is None:
+            self.cryptographic_params = {}
+            self.cryptographic_params['maxDepth'] = 1
+            self.cryptographic_params['scaleFactor'] = 50
+        
+        self.general_timer.start()
+        self.crypto_context = pycrypto.CKKSwrapper()
+        self.crypto_context.KeyGen(self.cryptographic_params['maxDepth'], self.cryptographic_params['scaleFactor'], self.nextPowerOfTwo)
+        self.general_timer.finish()
+        self.time_tracking[self.KEYGEN] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
+
+        self.general_timer.start()
+        self.encrypted_X = self.encrypt_data(np_to_list(self.X))
+        self.general_timer.finish()
+        self.time_tracking[self.DATAENCX] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
+
+        self.general_timer.start()
+        prepared_y = np_to_list(self.y)
+        prepared_y = [[element] for element in self.y] # must accept array, might change for fitting 
+        self.encrypted_y = self.encrypt_data(prepared_y)
+        self.general_timer.finish()
+        self.time_tracking[self.DATAENCY] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
+  
+  
     
     def encrypted_test(k = 2):
         train_input_data, train_check_data_file, test_input_data, test_train_check_data_file = ML.load_data('data/input.csv', 'data/check.csv', 'data/input.csv', 'data/check.csv')
@@ -257,31 +252,6 @@ class PyfhelKNN(KNN):
         svm.initialize(train_input_data, train_check_data_file, data_normalization= {'X': 'none', 'y': 'none'})
         svm.encrypted_fit()
         print(np.sign(svm.decrypt(svm.encrypted_predict([np_to_list(svm.X[23])]))), svm.y[23])
-        #plaintext_data_time = []
-
-        # TP = 0
-        # TF = 0
-        # FP = 0
-        # FF = 0
-        # timer = Timer()
-        # it = 0
-        # for point, expected in zip(test_input_data, test_train_check_data_file):
-        #     timer.start()
-        #     prediction = svm.plaintext_predict(point)
-        #     timer.finish()
-        #     plaintext_data_time.append([it, timer.get_time_in(Timer.TIMEFORMAT_MS)])
-        #     if prediction == expected:
-        #         if prediction > 0:
-        #             TP += 1
-        #         else:
-        #             TF += 1
-        #     else: 
-        #         if prediction > 0:
-        #             FP += 1
-        #         else:
-        #             FF += 1
-
-        #     it += 1
 
         print('------' + svm.algorithm_name + '--------')
         #print(f'TP: {TP}\nTF: {TF}\nFP: {FP}\nFF: {FF}\nNumber of elements: {TP + TF + FF + FP}\nCorrect predictions: {TP + TF}\nIncorrect prediction: {FF + FP}\nSuccess rate: {(TP + TF)/(TP + TF + FF + FP)}')
@@ -289,6 +259,21 @@ class PyfhelKNN(KNN):
         # print('-- Prediction times: [Includes latency for internal clock]')
         #pretty_table(plaintext_data_time, ['Value index', 'Time [MS]'])
 import os
-
+import copy
 if __name__ == '__main__':
-    PyfhelKNN.encrypted_test()
+    cryptographic_params = {}
+    cryptographic_params['maxDepth'] = 1
+    cryptographic_params['scaleFactor'] = 50
+    
+    crypto_context = pycrypto.CKKSwrapper()
+    crypto_context.KeyGen(cryptographic_params['maxDepth'], cryptographic_params['scaleFactor'], 64)
+
+    encrypted_array = crypto_context.Encrypt([1,2,3,4])
+    print(encrypted_array)
+    decrypted = crypto_context.Decrypt(encrypted_array)
+    print(decrypted[0:4])
+    
+    neu = copy.deepcopy(crypto_context)
+    neuDecrypr = neu.Decrypt(encrypted_array)
+    print(neuDecrypr[0:4])
+

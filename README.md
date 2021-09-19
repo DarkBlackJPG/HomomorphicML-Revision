@@ -81,6 +81,11 @@ Now we are supposed to build the program and install it. **NOTE**: gmake has an 
    
 
     git submodule update --init --recursive
+   
+   Before building the library, we must firsly enable pickling data, or rather - serialization of objects of the SEAL library. For that to happen, run the following command in the root directory. This is necessary for this project, it might not be necessary for yours.
+
+    python helper.py
+   
    Build the library
    
 

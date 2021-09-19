@@ -125,8 +125,6 @@ class CKKSwrapper {
   CiphertextInterfaceType *EvalInnerProduct(const CiphertextInterfaceType &c1,
                                    const CiphertextInterfaceType &c2,
                                    usint batch_size);
-
-
   /**
    * Ciphertext multiplication wrapper
    *
