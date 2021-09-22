@@ -12,9 +12,9 @@ Pyfhel	 [Pre] |  Y  |  Y  |  Y  |  Y  |
 SEAL	 [Pre] |  Y  |  Y  |  Y  |  Y  |
 ---------------+-----+-----+-----+-----+
 
-SEAL KNN - In progress [Monday]
 Palisade KNN - In Progress [Monday] <-- Problem je napraviti pickle-ing [https://valelab4.ucsf.edu/svn/3rdpartypublic/boost/libs/python/test/pickle3.cpp]
 
+SEAL KNN - In progress [In progress]
 
 
 SEAL SVM - In progress [Monday] <-- Obavezno testirati

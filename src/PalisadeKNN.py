@@ -259,7 +259,6 @@ class PyfhelKNN(KNN):
         # print('-- Prediction times: [Includes latency for internal clock]')
         #pretty_table(plaintext_data_time, ['Value index', 'Time [MS]'])
 import os
-import copy
 if __name__ == '__main__':
     cryptographic_params = {}
     cryptographic_params['maxDepth'] = 1
@@ -273,7 +272,7 @@ if __name__ == '__main__':
     decrypted = crypto_context.Decrypt(encrypted_array)
     print(decrypted[0:4])
     
-    neu = copy.deepcopy(crypto_context)
+    neu = pickle.dumps(crypto_context)
     neuDecrypr = neu.Decrypt(encrypted_array)
     print(neuDecrypr[0:4])
 

@@ -26,8 +26,12 @@
 
 #include <boost/python.hpp>
 #include "ckks_wrapper.h"
+#include <palisade/pke/palisade.h>
+#include <iostream>
 
 using namespace boost::python;
+
+#define make_tuple boost::python::make_tuple
 
 class cppVectorToPythonList {
  public:
@@ -42,6 +46,57 @@ class cppVectorToPythonList {
     }
     return pythonList->ptr();
   }
+};
+
+struct CKKS_pickle_suite : boost::python::pickle_suite
+{
+    static
+    boost::python::tuple
+    getinitargs(const pycrypto::CKKSwrapper& wrapper)
+    {
+        using namespace boost::python;
+        return make_tuple();
+    }
+
+    static
+    boost::python::tuple
+    getstate(boost::python::object wrapper_obj)
+    {
+        using namespace boost::python;
+        pycrypto::CKKSwrapper const& wrapper = extract<pycrypto::CKKSwrapper const&>(wrapper_obj)();
+        return make_tuple(wrapper_obj.attr("__dict__"),
+                              boost::ref(wrapper.get_m_cc()),
+                              boost::ref(wrapper.get_m_keys()));
+    }
+
+    static
+    void
+    setstate(boost::python::object w_obj, boost::python::tuple state)
+    {
+        using namespace boost::python;
+        std::cout << "Start extract in setstate" << std::endl;
+        pycrypto::CKKSwrapper& w = extract<pycrypto::CKKSwrapper&>(w_obj)();
+        
+        // restore the object's __dict__
+
+        std::cout << "Extract dict" << std::endl;
+        dict d = extract<dict>(w_obj.attr("__dict__"))();
+
+        std::cout << "Update dict" << std::endl;
+        d.update(state[0]);
+        
+        // restore the internal state of the C++ object
+
+        std::cout << "Set context" << std::endl;
+        lbcrypto::CryptoContext<lbcrypto::DCRTPoly> context = extract<lbcrypto::CryptoContext<lbcrypto::DCRTPoly>>(state[1]);
+
+        std::cout << "Set keys" << std::endl;
+        lbcrypto::LPKeyPair<lbcrypto::DCRTPoly> keys = extract<lbcrypto::LPKeyPair<lbcrypto::DCRTPoly>>(state[2]);
+
+
+        w.set_m_cc(context);
+        w.set_m_keys(keys);
+    }
 };
 
 BOOST_PYTHON_MODULE(pycrypto) {
@@ -73,5 +128,7 @@ BOOST_PYTHON_MODULE(pycrypto) {
       .def("EvalMultConst", &pycrypto::CKKSwrapper::EvalMultConst,
            return_value_policy<manage_new_object>())
       .def("EvalSum", &pycrypto::CKKSwrapper::EvalSum,
-           return_value_policy<manage_new_object>());
+           return_value_policy<manage_new_object>())
+      .def_pickle(CKKS_pickle_suite())
+      ;
 }

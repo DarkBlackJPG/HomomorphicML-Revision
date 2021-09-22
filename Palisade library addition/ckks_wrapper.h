@@ -163,6 +163,21 @@ class CKKSwrapper {
   CiphertextInterfaceType *EvalSum(const CiphertextInterfaceType &c,
                                    uint32_t batch_size);
 
+
+  /** 
+   *
+   * Has to be added, needed for the pickling functionality i.e. serialization
+   *  
+   */
+  
+  lbcrypto::CryptoContext<lbcrypto::DCRTPoly> get_m_cc() const { return m_cc;}
+
+  lbcrypto::LPKeyPair<lbcrypto::DCRTPoly> get_m_keys() const { return m_keys;}
+
+  void set_m_cc(lbcrypto::CryptoContext<lbcrypto::DCRTPoly> m_cc) { this->m_cc = m_cc; }
+
+  void set_m_keys(lbcrypto::LPKeyPair<lbcrypto::DCRTPoly> m_keys) { this->m_keys = m_keys; }
+
  private:
   // CryptoContext
   lbcrypto::CryptoContext<lbcrypto::DCRTPoly> m_cc;
@@ -179,3 +194,4 @@ class CKKSwrapper {
 }  // namespace pycrypto
 
 #endif
+
