@@ -1,4 +1,4 @@
-# 💩 Storm
+# FHEML
 This project is part of my Bachelor thesis at the School for Electrical Engineering @ Belgrade. 
 
 This project is supposed to analyse the performance of different Python libraries that use the base C++ encryption libraries behind the curtain. 
