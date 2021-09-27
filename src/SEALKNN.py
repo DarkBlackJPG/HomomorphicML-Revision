@@ -1,4 +1,6 @@
 import pickle
+
+from numpy import bytes0
 from KNN import KNN
 import seal
 from KNN import *
@@ -7,6 +9,7 @@ import random
 from DataSender import DataSender
 from DataReceiver import DataReceiver
 import time
+import os
 
 class SEALKNN(KNN):
     def __init__(self, name: str, k: int = 2) -> None:
@@ -94,12 +97,8 @@ class SEALKNN(KNN):
 
         self.plaintext_fit()
 
-        self.encrypted_w = self.encrypt_data(np_to_list(self.w))
-        self.encrypted_b = self.encrypt_data(self.b)
-
         encrypted_fit_timer.finish()
         self.time_tracking[self.ENCFIT] = encrypted_fit_timer.get_time_in(Timer.TIMEFORMAT_MS)
-        pass
 
     
     def decrypt(self, X) -> object:
@@ -118,14 +117,13 @@ class SEALKNN(KNN):
 
     
 
-    def encrypted_test(learning_rate=0.001, lambda_param=0.01, n_iters=1000):
+    def encrypted_test(k = 2):
         train_input_data, train_check_data_file, test_input_data, test_train_check_data_file = ML.load_data('data/input.csv', 'data/check.csv', 'data/input.csv', 'data/check.csv')
 
-        svm = SEALKNN('SEAL KNN', 2)
+        svm = SEALKNN('SEAL KNN', k)
         svm.initialize(train_input_data, train_check_data_file, data_normalization= {'X': 'minmax', 'y': 'none'})
-        svm.confuse_data([1,2,3], '123')
         svm.encrypted_fit()
-        print(np.sign(svm.decrypt(svm.encrypted_predict(np_to_list(svm.X[23])))), svm.y[23])
+        print(np.sign(svm.decrypt(svm.encrypted_predict([np_to_list(svm.X[23])]))), svm.y[23])
         #plaintext_data_time = []
 
         # TP = 0
@@ -163,39 +161,61 @@ class SEALKNN(KNN):
     def encrypted_predict(self, X) -> object:
         self.general_timer.start()
 
-        is_encrypted = isinstance(X[0], seal.Ciphertext)
-        X_ = X
-        if not is_encrypted:
-            X_ = self.encrypt_data([X])[0]
+        if len(X) > 1:
+            print('Expected only one point. No batching! shape(1, <number_features>)')
+            pass
+        
+        encrypted_X = X[0]
 
-        temp_result_array = []
-        for x, y in zip(X_, self.encrypted_w):
-            result = self.evaluator.multiply(x, y)
-            self.evaluator.relinearize_inplace(result, self.relin_key)
-            self.evaluator.rescale_to_next_inplace(result)
-            result.scale(self.scale)
-            temp_result_array.append(result)
+        is_encrypted = isinstance(encrypted_X[0], seal.Ciphertext)
+        if not is_encrypted:
+            encrypted_X = self.encrypt_data(encrypted_X)
         
-        sum_result = self.evaluator.add_many(temp_result_array)
-        # ToDo Sta ovo radi sunce ti jebem
-        if sum_result.parms_id() != self.encrypted_b.parms_id():
-                self.evaluator.mod_switch_to_inplace(sum_result, sum_result.parms_id())
-                self.evaluator.mod_switch_to_inplace(self.encrypted_b, sum_result.parms_id())
-        result = self.evaluator.add(sum_result, self.encrypted_b)
-        
+
+        if len(encrypted_X) != self.n_features:
+            print(f'Incorrect size of data. Expected {self.n_features} features')
+            raise ValueError
+
+        aes = AES()
+
+        # Calculate distance
+        encrypted_distance = []
+        for my_data in self.encrypted_X:
+            encrypted_distance.append(self.encrypted_distance(encrypted_X, my_data))
+
+        confused_data = self.confuse_data(encrypted_distance, self.password)
+        sorted_array = self.send_data_and_return_sorted(confused_data)
+        sorted_array = sorted_array[: self.k]
+
+        results = []
+        for element in sorted_array:
+            toDecrypt = element
+            pickled = aes.decrypt(toDecrypt, self.password, self.disclosed_iv)
+            results.append(pickle.loads(pickled))
+
+
         self.general_timer.finish()
         self.time_tracking[self.ENCPREDICT] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-        return result
+        return results
     
     
     def seal_single_encrypt(self, data):
         encoded_data = self.ckks_encoder.encode(data, self.scale)
         return self.encryptor.encrypt(encoded_data)
+    
+    def rescale(self, first, second):
+        first = self.evaluator.rescalte_to(first, first.parms_id())
+        second = self.evaluator.rescale_to(second, first.parms_id())
+
+        return first, second
 
     def seal_add(self, first, second):
         if first.parms_id() != second.parms_id():
                 self.evaluator.mod_switch_to_inplace(first, first.parms_id())
                 self.evaluator.mod_switch_to_inplace(second, first.parms_id())
+        
+
+        first, second = self.rescale(first, second)
         result = self.evaluator.add(first, second)
 
         return result
@@ -209,15 +229,15 @@ class SEALKNN(KNN):
 
         return_array = []
         for i in range(0, len(X)):
-            temporary_confused_data = self.seal_add(seal.Ciphertext(X[i]), self.seal_single_encrypt(self.confusion_random_value))
-            # temporary_confused_data = self.crypto_context.encryptFrac(self.crypto_context.decryptFrac(temporary_confused_data))
+            temp_ciphertext = seal.Ciphertext(X[i])
+            temp_random_val = self.seal_single_encrypt(self.confusion_random_value)
+            self.evaluator.rescale_to_inplace(temp_random_val, temp_ciphertext.parms_id())
+
+            temporary_confused_data = self.seal_add(temp_ciphertext, temp_random_val)
             
             encrypted_class_bytes = pickle.dumps(self.encrypted_y[i])
             
             encryption_result = aes.encrypt(encrypted_class_bytes, password, self.disclosed_iv)
-
-            # if self.confusion_encryption_details['iv'] is None:
-            #     self.confusion_encryption_details['iv'] = encryption_result['iv']
 
             return_array.append((temporary_confused_data, encryption_result['data']))
         
@@ -227,24 +247,40 @@ class SEALKNN(KNN):
         
         return permutation
 
+    def read_bytes_from_file(self, filename: str, remove = False):
+        file = open(filename, "rb")
+        bytes = file.read()
+        file.close()
+        if remove:
+            os.remove(filename)
+        return bytes
+
     def get_HE_context_bytes(self):
         context_dict = dict()
+        
+        self.public_key.save('public_key')
+        self.params.save('params')
+        self.secret_key.save('secret_key')
+        self.relin_key.save('relin_keys')
 
-        context_dict['context'] =  self.crypto_context.to_bytes_context()
-        context_dict['publicKey'] = self.crypto_context.to_bytes_publicKey()
-        context_dict['relinKey'] = self.crypto_context.to_bytes_relinKey()
-        # context_dict['rotateKey'] = self.crypto_context.to_bytes_rotateKey()
-        context_dict['secretKey'] = self.crypto_context.to_bytes_secretKey()
 
-        context_bytes = self.pickle_data(context_dict)
 
+        context_dict['scale'] = self.scale 
+        context_dict['slot_count'] = self.slot_count
+        context_dict['public_key'] = self.read_bytes_from_file('public_key', True)
+        context_dict['params'] = self.read_bytes_from_file('params', True)
+        context_dict['secret_key'] = self.read_bytes_from_file('secret_key', True)
+        context_dict['relin_keys'] = self.read_bytes_from_file('relin_keys', True)
+
+        context_bytes = pickle.dumps(context_dict)
+        
         return context_bytes
 
     def send_data_and_return_sorted(self, data, additional_data: dict = None):
         # data ==> (HE, AES) <-- Tuple
         data_packet = dict()
 
-        server_operation = 'pyfhel/sort' 
+        server_operation = 'seal/sort' 
         data_packet['context_data'] = self.get_HE_context_bytes()
         data_packet['necessary_data'] = data
         data_packet['additional_data'] = additional_data
@@ -268,25 +304,32 @@ class SEALKNN(KNN):
         sorted_array = self.unpickle_data(resulting_data)
 
         return sorted_array
-
-    
     
     def encrypted_distance(self, X1, X2):
-        X_1 = [PyCtxt(x) for x in X1] # Copy
-        X_2 = [PyCtxt(x) for x in X2] # Copy
+        X_1 = [seal.Ciphertext(x) for x in X1] # Copy
+        X_2 = [seal.Ciphertext(x) for x in X2] # Copy
         encrypted_sum = None
         for x1_element, x2_element in zip(X_1, X_2):
+             
+            if x1_element.parms_id() != x2_element.parms_id():
+                self.evaluator.mod_switch_to_inplace(x1_element, x1_element.parms_id())
+                self.evaluator.mod_switch_to_inplace(x2_element, x1_element.parms_id())
+
             if not encrypted_sum:
-                encrypted_sum = self.crypto_context.sub(x1_element, x2_element, True)
-                encrypted_sum = self.crypto_context.square(encrypted_sum)
-                encrypted_sum = ~ encrypted_sum
+                encrypted_sum = self.evaluator.sub(x1_element, x2_element)
+                encrypted_sum = self.evaluator.square(encrypted_sum)
+                encrypted_sum = self.evaluator.relinearize(encrypted_sum, self.relin_key)
             else:
-                temp_subtraction = self.crypto_context.sub(x1_element, x2_element, True)
-                square = self.crypto_context.square(temp_subtraction, True)
-                square = ~square
-                encrypted_sum = self.crypto_context.encryptFrac(self.crypto_context.decryptFrac(encrypted_sum))
-                encrypted_sum = self.crypto_context.add(square, encrypted_sum, True)
-            encrypted_sum = self.crypto_context.encryptFrac(self.crypto_context.decryptFrac(encrypted_sum))
+                temp_subtraction = self.evaluator.sub(x1_element, x2_element)
+                square = self.evaluator.square(temp_subtraction)
+                square = self.evaluator.relinearize(square, self.relin_key)
+
+                if square.parms_id() != encrypted_sum.parms_id():
+                    self.evaluator.mod_switch_to_inplace(square, square.parms_id())
+                    self.evaluator.mod_switch_to_inplace(encrypted_sum, square.parms_id())
+
+                encrypted_sum = self.evaluator.add(square, encrypted_sum)
+
         return encrypted_sum
 
     def symmetric_encrypt(self, X, password) -> object:
