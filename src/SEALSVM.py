@@ -100,10 +100,13 @@ class SEALSVM(SVM):
             temp_result_array.append(result)
         
         sum_result = self.evaluator.add_many(temp_result_array)
-        # ToDo Sta ovo radi sunce ti jebem
         if sum_result.parms_id() != self.encrypted_b.parms_id():
                 self.evaluator.mod_switch_to_inplace(sum_result, sum_result.parms_id())
                 self.evaluator.mod_switch_to_inplace(self.encrypted_b, sum_result.parms_id())
+        
+        self.evaluator.rescale_to_inplace(sum_result, sum_result.parms_id())
+        self.evaluator.rescale_to_inplace(self.encrypted_b, sum_result.parms_id())
+
         result = self.evaluator.add(sum_result, self.encrypted_b)
         
         self.general_timer.finish()
