@@ -10,10 +10,10 @@ import random
 import time
 from DataSender import DataSender
 from DataReceiver import DataReceiver
-from Crypto import Random
+from utility import *
+from collections import Sequence
 
-
-class PyfhelKNN(KNN):
+class PalisadeKNN(KNN):
 
     START_INT = 439 # Prime
     END_INT = 19319 # Prime
@@ -29,14 +29,15 @@ class PyfhelKNN(KNN):
         if isinstance(X, np.ndarray):
             raise ValueError
 
-        if not isinstance(X, list):
+        if not isinstance(X, Sequence):
             return self.crypto_context.encryptFrac(X)
 
         encrypted_data = []
         for row in X:
-            if isinstance(row, list): # and len(row) > 1: 
+            if isinstance(row, Sequence): # and len(row) > 1: 
                 encrypted_data.append(self.crypto_context.Encrypt(row))
             else:
+                print(row)
                 print('Invalid data for encryption, must be list')
                 raise ValueError
         return encrypted_data
@@ -62,63 +63,28 @@ class PyfhelKNN(KNN):
         
         encrypted_X = X[0]
 
-        is_encrypted = isinstance(encrypted_X[0], PyCtxt)
+        is_encrypted = isinstance(encrypted_X[0], pycrypto.Ciphertext)
         if not is_encrypted:
-            encrypted_X = self.encrypt_data(encrypted_X)
+            encrypted_X = self.encrypt_data(X)
         
-
-        if len(encrypted_X) != self.n_features:
-            print(f'Incorrect size of data. Expected {self.n_features} features')
-            raise ValueError
-
-        aes = AES()
 
         # Calculate distance
         encrypted_distance = []
         for my_data in self.encrypted_X:
-            encrypted_distance.append(self.encrypted_distance(encrypted_X, my_data))
+            encrypted_distance.append(self.encrypted_distance(encrypted_X[0], my_data))
 
         confused_data = self.confuse_data(encrypted_distance, self.password)
-        sorted_array = self.send_data_and_return_sorted(confused_data)
-        sorted_array = sorted_array[: self.k]
-
-        results = []
-        for element in sorted_array:
-            toDecrypt = element
-            pickled = aes.decrypt(toDecrypt, self.password, self.disclosed_iv)
-            results.append(pickle.loads(pickled))
-
 
         self.general_timer.finish()
         self.time_tracking[self.ENCPREDICT] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-        return results
+        return confused_data
     
     def confuse_data(self, X, password: str):
-        random.seed(int(time.time()))
-        self.confusion_random_value = random.random()
-        self.permutation = [i for i in range(0, len(X))]
-        random.shuffle(self.permutation)
-        aes = AES()
-
         return_array = []
         for i in range(0, len(X)):
-            temporary_confused_data = self.crypto_context.add(PyCtxt(X[i]), self.crypto_context.encryptFrac(self.confusion_random_value), True)
-            # temporary_confused_data = self.crypto_context.encryptFrac(self.crypto_context.decryptFrac(temporary_confused_data))
-            
-            encrypted_class_bytes = pickle.dumps(self.encrypted_y[i])
-            
-            encryption_result = aes.encrypt(encrypted_class_bytes, password, self.disclosed_iv)
-
-            # if self.confusion_encryption_details['iv'] is None:
-            #     self.confusion_encryption_details['iv'] = encryption_result['iv']
-
-            return_array.append((temporary_confused_data, encryption_result['data']))
+            return_array.append((X[i], self.encrypted_y[i]))
         
-        permutation = [None] * len(return_array)
-        for i in range(len(X)):
-            permutation[i] = return_array[self.permutation[i]]
-        
-        return permutation
+        return return_array
 
     def get_HE_context_bytes(self):
         context_dict = dict()
@@ -177,22 +143,11 @@ class PyfhelKNN(KNN):
 
 
     def encrypted_distance(self, X1, X2):
-        X_1 = [PyCtxt(x) for x in X1] # Copy
-        X_2 = [PyCtxt(x) for x in X2] # Copy
-        encrypted_sum = None
-        for x1_element, x2_element in zip(X_1, X_2):
-            if not encrypted_sum:
-                encrypted_sum = self.crypto_context.sub(x1_element, x2_element, True)
-                encrypted_sum = self.crypto_context.square(encrypted_sum)
-                encrypted_sum = ~ encrypted_sum
-            else:
-                temp_subtraction = self.crypto_context.sub(x1_element, x2_element, True)
-                square = self.crypto_context.square(temp_subtraction, True)
-                square = ~square
-                encrypted_sum = self.crypto_context.encryptFrac(self.crypto_context.decryptFrac(encrypted_sum))
-                encrypted_sum = self.crypto_context.add(square, encrypted_sum, True)
-            encrypted_sum = self.crypto_context.encryptFrac(self.crypto_context.decryptFrac(encrypted_sum))
-        return encrypted_sum
+        temp = self.crypto_context.EvalSub(X1, X2)
+        temp = self.crypto_context.EvalMultAndRelinearize(temp, temp)
+        temp = self.crypto_context.EvalSum(temp, self.nextPowerOfTwo)
+
+        return temp
 
     def symmetric_encrypt(self, X, password) -> object:
         if not isinstance(X, bytes):
@@ -242,7 +197,6 @@ class PyfhelKNN(KNN):
         self.encrypted_y = self.encrypt_data(prepared_y)
         self.general_timer.finish()
         self.time_tracking[self.DATAENCY] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-  
   
     
     def encrypted_test(k = 2):

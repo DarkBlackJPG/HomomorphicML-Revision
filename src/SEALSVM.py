@@ -16,7 +16,7 @@ class SEALSVM(SVM):
         if cryptographic_params is None:
             self.cryptographic_params = {}
             self.cryptographic_params['poly_modulus_degree'] = 16384
-            self.cryptographic_params['coeff_modulus'] = [60, 40, 40, 40, 40, 60]
+            self.cryptographic_params['coeff_modulus'] =[60, 40, 40, 60]
             self.cryptographic_params['scale'] = 2.0 ** 40
         
         self.general_timer.start()
@@ -60,11 +60,11 @@ class SEALSVM(SVM):
             if isinstance(row, list) and len(row) > 1: 
                 temp_array = []
                 for cell in row:
-                    encoded_cell = self.ckks_encoder.encode(cell, self.scale)
+                    encoded_cell = self.ckks_encoder.encode([cell], self.scale)
                     temp_array.append(self.encryptor.encrypt(encoded_cell))
                 encrypted_data.append(temp_array)
             else:
-                encoded_cell = self.ckks_encoder.encode(row, self.scale)
+                encoded_cell = self.ckks_encoder.encode([row], self.scale)
                 encrypted_data.append(self.encryptor.encrypt(encoded_cell))
         return encrypted_data
     
@@ -76,8 +76,15 @@ class SEALSVM(SVM):
 
         self.plaintext_fit()
 
+        self.nested_timer.start()
         self.encrypted_w = self.encrypt_data(np_to_list(self.w))
-        self.encrypted_b = self.encrypt_data(self.b)
+        self.nested_timer.finish()
+        self.time_tracking[self.WENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
+
+        self.nested_timer.start()
+        self.encrypted_b = self.encrypt_data([self.b])[0]
+        self.nested_timer.finish()
+        self.time_tracking[self.BENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
 
         encrypted_fit_timer.finish()
         self.time_tracking[self.ENCFIT] = encrypted_fit_timer.get_time_in(Timer.TIMEFORMAT_MS)
@@ -90,7 +97,7 @@ class SEALSVM(SVM):
         X_ = X
         if not is_encrypted:
             X_ = self.encrypt_data([X])[0]
-
+        
         temp_result_array = []
         for x, y in zip(X_, self.encrypted_w):
             result = self.evaluator.multiply(x, y)
@@ -101,14 +108,10 @@ class SEALSVM(SVM):
         
         sum_result = self.evaluator.add_many(temp_result_array)
         if sum_result.parms_id() != self.encrypted_b.parms_id():
-                self.evaluator.mod_switch_to_inplace(sum_result, sum_result.parms_id())
-                self.evaluator.mod_switch_to_inplace(self.encrypted_b, sum_result.parms_id())
-        
-        self.evaluator.rescale_to_inplace(sum_result, sum_result.parms_id())
-        self.evaluator.rescale_to_inplace(self.encrypted_b, sum_result.parms_id())
+            self.evaluator.mod_switch_to_inplace(sum_result, sum_result.parms_id())
+            self.evaluator.mod_switch_to_inplace(self.encrypted_b, sum_result.parms_id())
 
-        result = self.evaluator.add(sum_result, self.encrypted_b)
-        
+        result = self.evaluator.sub(sum_result, self.encrypted_b)
         self.general_timer.finish()
         self.time_tracking[self.ENCPREDICT] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
         return result

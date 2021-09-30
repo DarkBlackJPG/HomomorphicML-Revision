@@ -4,6 +4,7 @@ import numpy as np
 import csv
 from tabulate import tabulate
 
+
 class Timer:
     TIMEFORMAT_SEC = 1
     TIMEFORMAT_MS = 1000

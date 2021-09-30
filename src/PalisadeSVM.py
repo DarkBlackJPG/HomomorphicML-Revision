@@ -1,6 +1,9 @@
 from numpy.lib.arraysetops import isin
+from sklearn import utils
 from SVM import *
 import pycrypto
+from utility import execute_noramlization
+import pandas as pd
 
 class PalisadeSVM(SVM):
     def __init__(self, name: str, learning_rate, lambda_param, n_iters) -> None:
@@ -32,8 +35,15 @@ class PalisadeSVM(SVM):
 
         self.plaintext_fit()
 
+        self.nested_timer.start()
         self.encrypted_w = self.encrypt_data([np_to_list(self.w)])[0]
+        self.nested_timer.finish()
+        self.time_tracking[self.WENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
+
+        self.nested_timer.start()
         self.encrypted_b = self.encrypt_data([[self.b] * self.n_features])[0] # Must be size of data
+        self.nested_timer.finish()
+        self.time_tracking[self.BENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
 
         encrypted_fit_timer.finish()
         self.time_tracking[self.ENCFIT] = encrypted_fit_timer.get_time_in(Timer.TIMEFORMAT_MS)
@@ -49,8 +59,9 @@ class PalisadeSVM(SVM):
 
         # Todo
         result = self.crypto_context.EvalMultAndRelinearize(X_, self.encrypted_w)
+        result = self.encrypt_data([self.decrypt(result)])[0]
         result = self.crypto_context.EvalSum(result, self.nextPowerOfTwo)
-        result = self.crypto_context.EvalAdd(result, self.encrypted_b)
+        result = self.crypto_context.EvalSub(result, self.encrypted_b)
 
         self.general_timer.finish()
         self.time_tracking[self.ENCPREDICT] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
@@ -98,43 +109,71 @@ class PalisadeSVM(SVM):
         self.time_tracking[self.DATAENCY] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
 
     def encrypted_test(learning_rate=0.001, lambda_param=0.01, n_iters=1000):
-        train_input_data, train_check_data_file, test_input_data, test_train_check_data_file = ML.load_data('data/input.csv', 'data/check.csv', 'data/input.csv', 'data/check.csv')
+        dataset = 'simple'
+        train_input_data, train_check_data_file, test_input_data, test_train_check_data_file = ML.load_data(
+            'data/'+dataset+'_input_train.csv', 'data/'+dataset+'_check_train.csv',
+            'data/'+dataset+'_input_test.csv', 'data/'+dataset+'_check_test.csv'
+            )
 
         svm = PalisadeSVM('Palisade Linear SVM', learning_rate, lambda_param, n_iters)
         svm.initialize(train_input_data, train_check_data_file, data_normalization= {'X': 'minmax', 'y': 'none'})
         svm.encrypted_fit()
-        print(np.sign(svm.decrypt(svm.encrypted_predict(np_to_list(svm.X[23])))), svm.y[23])
-        #plaintext_data_time = []
+        plaintext_data_time = []
 
-        # TP = 0
-        # TF = 0
-        # FP = 0
-        # FF = 0
-        # timer = Timer()
-        # it = 0
-        # for point, expected in zip(test_input_data, test_train_check_data_file):
-        #     timer.start()
-        #     prediction = svm.plaintext_predict(point)
-        #     timer.finish()
-        #     plaintext_data_time.append([it, timer.get_time_in(Timer.TIMEFORMAT_MS)])
-        #     if prediction == expected:
-        #         if prediction > 0:
-        #             TP += 1
-        #         else:
-        #             TF += 1
-        #     else: 
-        #         if prediction > 0:
-        #             FP += 1
-        #         else:
-        #             FF += 1
+        TP = 0
+        TF = 0
+        FP = 0
+        FF = 0
 
-        #     it += 1
+        TPE = 0
+        TFE = 0
+        FPE = 0
+        FFE = 0
+        timer = Timer()
+        it = 0
+        encrypted_prediction = []
+        expectedd = []
+        plaintext_prediction = []
+        
+        for point, expected in zip(test_input_data, test_train_check_data_file):
+            expectedd.append(expectedd)
+            point = execute_noramlization(point, 'minmax')
+            prediction = svm.plaintext_predict(point)
+            plaintext_prediction.append(prediction)
+            encrypted_prediction = np.sign(svm.decrypt(svm.encrypted_predict(point)))[0]
+            plaintext_prediction.append(encrypted_prediction)
+
+            if prediction == expected:
+                if prediction > 0:
+                    TP += 1
+                else:
+                    TF += 1
+            else: 
+                if prediction > 0:
+                    FP += 1
+                else:
+                    FF += 1
+
+            if encrypted_prediction == expected:
+                if encrypted_prediction > 0:
+                    TPE += 1
+                else:
+                    TFE += 1
+            else: 
+                if encrypted_prediction > 0:
+                    FPE += 1
+                else:
+                    FFE += 1
+
+            it += 1
 
         print('------' + svm.algorithm_name + '--------')
-        #print(f'TP: {TP}\nTF: {TF}\nFP: {FP}\nFF: {FF}\nNumber of elements: {TP + TF + FF + FP}\nCorrect predictions: {TP + TF}\nIncorrect prediction: {FF + FP}\nSuccess rate: {(TP + TF)/(TP + TF + FF + FP)}')
+        print(f'TP: {TP}\nTF: {TF}\nFP: {FP}\nFF: {FF}\nNumber of elements: {TP + TF + FF + FP}\nCorrect predictions: {TP + TF}\nIncorrect prediction: {FF + FP}\nSuccess rate: {(TP + TF)/(TP + TF + FF + FP)}')
+        print('---- Encrypted statistic ---- ')
+        print(f'TP: {TPE}\nTF: {TFE}\nFP: {FPE}\nFF: {FFE}\nNumber of elements: {TPE + TFE + FFE + FPE}\nCorrect predictions: {TPE + TFE}\nIncorrect prediction: {FFE + FPE}\nSuccess rate: {(TPE + TFE)/(TPE + TFE + FFE + FPE)}')
         svm.print_time_tracking_data()
-        # print('-- Prediction times: [Includes latency for internal clock]')
-        #pretty_table(plaintext_data_time, ['Value index', 'Time [MS]'])
+        print('-- Prediction times: [Includes latency for internal clock]')
+
     
 if __name__ == '__main__':
     PalisadeSVM.encrypted_test()

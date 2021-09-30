@@ -41,7 +41,8 @@ class SVM(ML):
         self.general_timer.start()
 
         X_ = list_to_np(X)
-        approx = np.dot(X_, self.w) - self.b
+        approx = np.dot(X_, self.w)
+        approx -= self.b
         result = np.sign(approx)
 
         self.general_timer.finish()

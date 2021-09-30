@@ -30,8 +30,18 @@ class PyfhelSVM(SVM):
 
         self.plaintext_fit()
 
-        self.encrypted_w = self.encrypt_data(np_to_list(self.w))
+        
         self.encrypted_b = self.encrypt_data(self.b)
+
+        self.nested_timer.start()
+        self.encrypted_w = self.encrypt_data(np_to_list(self.w))
+        self.nested_timer.finish()
+        self.time_tracking[self.WENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
+
+        self.nested_timer.start()
+        self.encrypted_b = self.encrypt_data(self.b)
+        self.nested_timer.finish()
+        self.time_tracking[self.BENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
 
         encrypted_fit_timer.finish()
         self.time_tracking[self.ENCFIT] = encrypted_fit_timer.get_time_in(Timer.TIMEFORMAT_MS)

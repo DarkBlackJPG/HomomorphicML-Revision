@@ -90,6 +90,7 @@ class KNN(ML):
 
         self.X = list_to_np(self.X)
         self.y = list_to_np(self.y)
+        self.nextPowerOfTwo = next_power_of_2(self.n_features + 1)
 
     def plaintext_test(k = 2):
         train_input_data_file = 'data/input.csv'

@@ -10,6 +10,7 @@ from DataSender import DataSender
 from DataReceiver import DataReceiver
 import time
 import os
+import math
 
 class SEALKNN(KNN):
     def __init__(self, name: str, k: int = 2) -> None:
@@ -81,12 +82,10 @@ class SEALKNN(KNN):
             if isinstance(row, list) and len(row) > 1: 
                 temp_array = []
                 for cell in row:
-                    encoded_cell = self.ckks_encoder.encode(cell, self.scale)
-                    temp_array.append(self.encryptor.encrypt(encoded_cell))
+                    temp_array.append(self.seal_single_encrypt(cell))
                 encrypted_data.append(temp_array)
             else:
-                encoded_cell = self.ckks_encoder.encode(row, self.scale)
-                encrypted_data.append(self.encryptor.encrypt(encoded_cell))
+                encrypted_data.append(self.seal_single_encrypt(row))
         return encrypted_data
     
 
@@ -118,7 +117,7 @@ class SEALKNN(KNN):
     
 
     def encrypted_test(k = 2):
-        train_input_data, train_check_data_file, test_input_data, test_train_check_data_file = ML.load_data('data/input.csv', 'data/check.csv', 'data/input.csv', 'data/check.csv')
+        train_input_data, train_check_data_file, test_input_data, test_train_check_data_file = ML.load_data('data/simple_input_test.csv', 'data/simple_check_test.csv', 'data/simple_input_test.csv', 'data/simple_check_test.csv')
 
         svm = SEALKNN('SEAL KNN', k)
         svm.initialize(train_input_data, train_check_data_file, data_normalization= {'X': 'minmax', 'y': 'none'})
@@ -176,27 +175,16 @@ class SEALKNN(KNN):
             print(f'Incorrect size of data. Expected {self.n_features} features')
             raise ValueError
 
-        aes = AES()
-
         # Calculate distance
         encrypted_distance = []
         for my_data in self.encrypted_X:
             encrypted_distance.append(self.encrypted_distance(encrypted_X, my_data))
 
         confused_data = self.confuse_data(encrypted_distance, self.password)
-        sorted_array = self.send_data_and_return_sorted(confused_data)
-        sorted_array = sorted_array[: self.k]
-
-        results = []
-        for element in sorted_array:
-            toDecrypt = element
-            pickled = aes.decrypt(toDecrypt, self.password, self.disclosed_iv)
-            results.append(pickle.loads(pickled))
-
 
         self.general_timer.finish()
         self.time_tracking[self.ENCPREDICT] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-        return results
+        return confused_data
     
     
     def seal_single_encrypt(self, data):
@@ -204,48 +192,24 @@ class SEALKNN(KNN):
         return self.encryptor.encrypt(encoded_data)
     
     def rescale(self, first, second):
-        first = self.evaluator.rescalte_to(first, first.parms_id())
+        first = self.evaluator.rescale_to(first, first.parms_id())
         second = self.evaluator.rescale_to(second, first.parms_id())
 
         return first, second
 
-    def seal_add(self, first, second):
-        if first.parms_id() != second.parms_id():
-                self.evaluator.mod_switch_to_inplace(first, first.parms_id())
-                self.evaluator.mod_switch_to_inplace(second, first.parms_id())
-        
 
-        first, second = self.rescale(first, second)
-        result = self.evaluator.add(first, second)
-
-        return result
+    def decrypt_decode_(self, data):
+        decrypted = self.decryptor.decrypt(data)
+        decoded = self.ckks_encoder.decode(decrypted)
+        return decoded
     
     def confuse_data(self, X, password: str):
-        random.seed(int(time.time()))
-        self.confusion_random_value = random.random()
-        self.permutation = [i for i in range(0, len(X))]
-        random.shuffle(self.permutation)
-        aes = AES()
-
         return_array = []
         for i in range(0, len(X)):
-            temp_ciphertext = seal.Ciphertext(X[i])
-            temp_random_val = self.seal_single_encrypt(self.confusion_random_value)
-            self.evaluator.rescale_to_inplace(temp_random_val, temp_ciphertext.parms_id())
-
-            temporary_confused_data = self.seal_add(temp_ciphertext, temp_random_val)
-            
-            encrypted_class_bytes = pickle.dumps(self.encrypted_y[i])
-            
-            encryption_result = aes.encrypt(encrypted_class_bytes, password, self.disclosed_iv)
-
-            return_array.append((temporary_confused_data, encryption_result['data']))
+            return_array.append((X[i], self.encrypted_y[i]))
+    
         
-        permutation = [None] * len(return_array)
-        for i in range(len(X)):
-            permutation[i] = return_array[self.permutation[i]]
-        
-        return permutation
+        return return_array
 
     def read_bytes_from_file(self, filename: str, remove = False):
         file = open(filename, "rb")
@@ -277,33 +241,7 @@ class SEALKNN(KNN):
         return context_bytes
 
     def send_data_and_return_sorted(self, data, additional_data: dict = None):
-        # data ==> (HE, AES) <-- Tuple
-        data_packet = dict()
-
-        server_operation = 'seal/sort' 
-        data_packet['context_data'] = self.get_HE_context_bytes()
-        data_packet['necessary_data'] = data
-        data_packet['additional_data'] = additional_data
-
-        # Password & IV must be disclosed beforehand, either in person or via KDC
-        ds = DataSender({'host': 'localhost', 'port': 8080})
-        dr = DataReceiver({'host': 'localhost', 'port': 8081})
-        password = self.password
-        aes = AES()
-
-        prepared_data = self.pickle_data(data_packet)
-        encrypted_data = aes.encrypt(prepared_data, password, self.disclosed_iv)['data']
-        prepared_encrypted = pickle.dumps((encrypted_data, server_operation))
-        # SEND DATA
-        ds.send_data(prepared_encrypted)
-
-        # RECEIVE DATA
-        resulting_vector = dr.connect()
-        resulting_vector = pickle.loads(resulting_vector)
-        resulting_data = aes.decrypt(resulting_vector, self.password, self.disclosed_iv)
-        sorted_array = self.unpickle_data(resulting_data)
-
-        return sorted_array
+      pass
     
     def encrypted_distance(self, X1, X2):
         X_1 = [seal.Ciphertext(x) for x in X1] # Copy
@@ -329,7 +267,6 @@ class SEALKNN(KNN):
                     self.evaluator.mod_switch_to_inplace(encrypted_sum, square.parms_id())
 
                 encrypted_sum = self.evaluator.add(square, encrypted_sum)
-
         return encrypted_sum
 
     def symmetric_encrypt(self, X, password) -> object:

@@ -1,4 +1,20 @@
-# FHEML
+# FHEML        self.nested_timer.start()
+        self.encrypted_w = self.encrypt_data([np_to_list(self.w)])[0]
+        self.nested_timer.finish()
+        self.time_tracking[self.WENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
+
+        self.nested_timer.start()
+        self.encrypted_b = self.encrypt_data([[self.b] * self.n_features])[0] # Must be size of data
+        self.nested_timer.finish()
+        self.time_tracking[self.BENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)        self.nested_timer.start()
+        self.encrypted_w = self.encrypt_data([np_to_list(self.w)])[0]
+        self.nested_timer.finish()
+        self.time_tracking[self.WENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
+
+        self.nested_timer.start()
+        self.encrypted_b = self.encrypt_data([[self.b] * self.n_features])[0] # Must be size of data
+        self.nested_timer.finish()
+        self.time_tracking[self.BENC] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
 This project is part of my Bachelor thesis at the School for Electrical Engineering @ Belgrade. 
 
 This project is supposed to analyse the performance of different Python libraries that use the base C++ encryption libraries behind the curtain. 

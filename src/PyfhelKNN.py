@@ -76,20 +76,11 @@ class PyfhelKNN(KNN):
         for my_data in self.encrypted_X:
             encrypted_distance.append(self.encrypted_distance(encrypted_X, my_data))
 
-        confused_data = self.confuse_data(encrypted_distance, self.password)
-        sorted_array = self.send_data_and_return_sorted(confused_data)
-        sorted_array = sorted_array[: self.k]
-
-        results = []
-        for element in sorted_array:
-            toDecrypt = element
-            pickled = aes.decrypt(toDecrypt, self.password, self.disclosed_iv)
-            results.append(pickle.loads(pickled))
-
-
+        data_to_return = self.confuse_data(encrypted_distance, self.password)
+        
         self.general_timer.finish()
         self.time_tracking[self.ENCPREDICT] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
-        return results
+        return data_to_return
     
     def confuse_data(self, X, password: str):
         random.seed(int(time.time()))
@@ -100,23 +91,9 @@ class PyfhelKNN(KNN):
 
         return_array = []
         for i in range(0, len(X)):
-            temporary_confused_data = self.crypto_context.add(PyCtxt(X[i]), self.crypto_context.encryptFrac(self.confusion_random_value), True)
-            # temporary_confused_data = self.crypto_context.encryptFrac(self.crypto_context.decryptFrac(temporary_confused_data))
-            
-            encrypted_class_bytes = pickle.dumps(self.encrypted_y[i])
-            
-            encryption_result = aes.encrypt(encrypted_class_bytes, password, self.disclosed_iv)
-
-            # if self.confusion_encryption_details['iv'] is None:
-            #     self.confusion_encryption_details['iv'] = encryption_result['iv']
-
-            return_array.append((temporary_confused_data, encryption_result['data']))
+            return_array.append((X[i], self.encrypted_y[i]))
         
-        permutation = [None] * len(return_array)
-        for i in range(len(X)):
-            permutation[i] = return_array[self.permutation[i]]
-        
-        return permutation
+        return return_array
 
     def get_HE_context_bytes(self):
         context_dict = dict()
@@ -288,7 +265,3 @@ class PyfhelKNN(KNN):
         svm.print_time_tracking_data()
         # print('-- Prediction times: [Includes latency for internal clock]')
         #pretty_table(plaintext_data_time, ['Value index', 'Time [MS]'])
-import os
-
-if __name__ == '__main__':
-    PyfhelKNN.encrypted_test()

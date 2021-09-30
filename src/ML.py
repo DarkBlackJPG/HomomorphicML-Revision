@@ -10,11 +10,8 @@ class ML:
         self.KEYGEN = 'keyGeneration'
         self.DATAENCX = 'inputDataEncryption'
         self.DATAENCY = 'checkDataEncryption'
-        self.CHECKENC = 'checkEncryption'
         self.WENC = 'weightsEncryption'
         self.BENC = 'biasEncryption'
-        self.CPREDICT = 'ciphertextPredict'
-        self.CPREDICTENC = 'ciphertextPredictEncryption'
         self.PLAINFIT = 'plaintextFit'
         self.PLAINPREDICT = 'plaintextPredict'
         self.ENCFIT = 'encryptedFit'
@@ -24,11 +21,8 @@ class ML:
         self.time_tracking_names.append(self.KEYGEN)
         self.time_tracking_names.append(self.DATAENCX)
         self.time_tracking_names.append(self.DATAENCY)
-        self.time_tracking_names.append(self.CHECKENC)
         self.time_tracking_names.append(self.WENC)
         self.time_tracking_names.append(self.BENC)
-        self.time_tracking_names.append(self.CPREDICT)
-        self.time_tracking_names.append(self.CPREDICTENC)
         self.time_tracking_names.append(self.PLAINFIT)
         self.time_tracking_names.append(self.PLAINPREDICT)
         self.time_tracking_names.append(self.ENCFIT)
@@ -39,6 +33,7 @@ class ML:
             self.time_tracking[element] = -1
 
         self.general_timer = Timer()
+        self.nested_timer = Timer()
 
         pass
 
@@ -64,17 +59,12 @@ class ML:
         pass
         
     def load_data(train_input_file: str, train_check_file: str, test_input_file: str, test_check_file: str):
-        train_input_data_file = 'data/input.csv'
-        train_check_data_file = 'data/check.csv'
-
-        test_input_data_file = 'data/input.csv' # todo
-        test_check_data_file = 'data/check.csv' # todo
         
-        train_input_data = read_csv_to_array(train_input_data_file)
-        train_check_data_file = read_csv_to_array(train_check_data_file)
+        train_input_data = read_csv_to_array(train_input_file)
+        train_check_data_file = read_csv_to_array(train_check_file)
 
-        test_input_data = read_csv_to_array(test_input_data_file)
-        test_train_check_data_file = read_csv_to_array(test_check_data_file)
+        test_input_data = read_csv_to_array(test_input_file)
+        test_train_check_data_file = read_csv_to_array(test_check_file)
 
         return train_input_data, train_check_data_file, test_input_data, test_train_check_data_file
 
