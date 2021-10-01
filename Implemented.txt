@@ -7,9 +7,9 @@ Palisade [Fit] |  N  |  N  |  Y  |  Y  |
 Pyfhel	 [Fit] |  N  |  N  |  Y  |  Y  |
 SEAL	 [Fit] |  N  |  N  |  Y  |  Y  |
 ---------------+-----+-----+-----+-----+
-Palisade [Pre] |  N  |  Y  |  Y  |  Y  |
+Palisade [Pre] |  Y  |  Y  |  Y  |  Y  |
 Pyfhel	 [Pre] |  Y  |  Y  |  Y  |  Y  |
-SEAL	 [Pre] |  ?  |  Y  |  Y  |  Y  |
+SEAL	 [Pre] |  Y  |  Y  |  Y  |  Y  |
 ---------------+-----+-----+-----+-----+
 
 Palisade KNN - In Progress [Monday] <-- Problem je napraviti pickle-ing [https://valelab4.ucsf.edu/svn/3rdpartypublic/boost/libs/python/test/pickle3.cpp]

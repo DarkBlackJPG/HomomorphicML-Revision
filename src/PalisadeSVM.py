@@ -50,7 +50,7 @@ class PalisadeSVM(SVM):
         pass
 
     def encrypted_predict(self, X) -> object:
-        self.general_timer.start()
+        self.nested_timer.start()
 
         is_encrypted = isinstance(X[0], pycrypto.Ciphertext)
         X_ = X
@@ -63,8 +63,8 @@ class PalisadeSVM(SVM):
         result = self.crypto_context.EvalSum(result, self.nextPowerOfTwo)
         result = self.crypto_context.EvalSub(result, self.encrypted_b)
 
-        self.general_timer.finish()
-        self.time_tracking[self.ENCPREDICT] = self.general_timer.get_time_in(Timer.TIMEFORMAT_MS)
+        self.nested_timer.finish()
+        self.time_tracking[self.ENCPREDICT] = self.nested_timer.get_time_in(Timer.TIMEFORMAT_MS)
         return result
     
 
